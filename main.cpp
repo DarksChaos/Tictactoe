@@ -9,17 +9,63 @@
 #define Log(a, b, c)
 #else
 auto start = std::chrono::high_resolution_clock::now();
-#define Log(func, args, txt) std::cout << '[' << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << "ms] " << func << '(' << args << "): " << txt << "\n";start = std::chrono::high_resolution_clock::now();
+
+#define Log(func, args, txt)\
+std::cout /*<< '[' << std::chrono::duration_cast<std::chrono::milliseconds>\(std::chrono::high_resolution_clock::now() - start).count()\
+<< "ms] " */<< func << '(' << args << "): " << txt << "\n"\
+/*start = std::chrono::high_resolution_clock::now();*/
 #endif
 
 enum Entity {
-    PLAYING = -1, 
+    PLAYING = -1,
     OTHER = 0, LOSING = 0,
     EMPTY = 1, TIE = 1, 
     YOU = 2, WINNING = 2,
 };
 
 using Position = std::array<Entity, 9>;
+
+std::string entity_case_str(Entity e) {
+    switch(e) {
+        case OTHER: return "other";
+        case EMPTY: return "empty";
+        case YOU: return "you";
+        default: return "none";
+    }
+}
+
+std::string entity_eval_str(Entity e) {
+     switch(e) {
+        case PLAYING: return "playing";
+        case TIE: return "tie";
+        case LOSING: return "losing";
+        case WINNING: return "winning";
+        default: return "none";
+    }
+}
+
+std::string position_str(Position position);
+
+struct TreeNode {
+    // game-related
+    Position position;
+    Entity player = YOU;
+    // tree-related
+    std::vector<TreeNode> branches = {};
+    Entity eval = PLAYING;
+    size_t depth = 0;
+    int last_move = -1;
+ 
+    void play(int i) {
+        if(position[i] == EMPTY) {
+            position[i] = player;
+            player = (player == YOU ? OTHER : YOU);
+        }
+    }
+    void print_position() {
+        std::cout << position_str(position) << '\n';
+    }
+};
 
 char chars[3] = {'o', ' ', 'x'};
 
@@ -35,7 +81,7 @@ std::string position_str(Position position) {
 
 std::string position_fast_str(Position position) {
     std::ostringstream os;
-    os << '[';
+    os << "[ ";
     for(int i: position) {
         os << i << ' ';
     }
@@ -43,58 +89,36 @@ std::string position_fast_str(Position position) {
     return os.str();
 }
 
-void print_position(Position position) {
-    std::cout << position_str(position) << '\n';
-}
-
-struct TreeNode {
-    Position position;
-    Entity player = YOU;
-    std::vector<TreeNode> next;
-    void play(int i) {
-        if(position[i] == EMPTY) {
-            position[i] = player;
-            player = (player == YOU ? OTHER : YOU);
-        }
-    }
-    void print() {
-        print_position(position);
-    }
-};
-
 bool eq(Entity a, Entity b, Entity c) {
     return a==b && a==c;
 }
 
-Entity game_status(Position position) {
-#define NAME "game_status" 
+Entity position_eval(Position position) {
+#define NAME "position_eval" 
 #define ARGS position_fast_str(position)
-    Log(NAME, ARGS, "Computing status");
-    Entity status;
+    Log(NAME, ARGS, "Computing eval");
     if(position[0] != EMPTY && (
         eq(position[0], position[1], position[2])
         || eq(position[0], position[4], position[8])
         || eq(position[0], position[3], position[6])
-    )) status = position[0];
+    )) return  position[0];
     else if(position[8] != EMPTY && (
         eq(position[8], position[1], position[2])
         || eq(position[8], position[4], position[8])
-    )) status = position[8];
+    )) return  position[8];
     else if(position[4] != EMPTY && (
         eq(position[4], position[5], position[6])
         || eq(position[4], position[1], position[7])
-    )) status = position[4];
+    )) return position[4];
     else {
-        status = TIE;
         for(int i = 0; i < 9; i++) {
             if(position[i] == EMPTY) {
-                status = PLAYING;
+                return PLAYING;
                 break;
             }
         }
     }
-    Log(NAME, ARGS, "Done");
-    return status;
+    return TIE;
 }
 
 std::vector<int> list_moves(Position position) {
@@ -110,19 +134,21 @@ std::vector<int> list_moves(Position position) {
     return moves;
 }
 
-int total_positions = 0; 
-int depth = 0;
+
 TreeNode compute_tree(TreeNode& top) {
 #define NAME "compute_tree"
 #define ARGS position_fast_str(top.position) << ", depth=" << depth << ", id=" << id
+    static int total_positions = 0; 
+    static int depth = 0;
     total_positions++; depth++;
     int id = total_positions;
-    int cur_total = total_positions;
-    Log(NAME, ARGS, "Computing tree");
+    Log(NAME, ARGS, "Computing tree for position " << position_fast_str(top.position));
     std::vector<int> moves = list_moves(top.position);
-    if(moves.size() == 0 || game_status(top.position) != PLAYING) {
+    Entity eval = position_eval(top.position);
+    if(moves.size() == 0 || eval != PLAYING) {
         depth--;
-        Log(NAME, ARGS, "Returning: Game finished");
+        Log(NAME, ARGS, "Game finished, returning eval " << entity_eval_str(eval));
+        top.eval = eval;
         return top;
     }
     Log(NAME, ARGS, "Entering loop");
@@ -131,20 +157,22 @@ TreeNode compute_tree(TreeNode& top) {
         TreeNode copy = { top.position, top.player, {}};
         Log(NAME, ARGS, "Copied tree position and player, move=" << move);
         copy.play(move);
-        Log(NAME, ARGS, "Applied move=" << move << "computing tree for new board=" << position_fast_str(copy.position));
-        top.next.push_back(compute_tree(copy));
-        Log(NAME, ARGS, "");
+        Log(NAME, ARGS, "Applied move " << move << " to branch");
+        top.branches.push_back(compute_tree(copy));
+        Log(NAME, ARGS, "Added branch after move " << move);
     }
-    Log(NAME, ARGS, "Exitting loop");
     depth--;
+    Log(NAME, ARGS, "Returning top");
     return top;
+}
+
+TreeNode compute_tree(TreeNode&& top) {
+    return compute_tree(top);
 }
 
 int main() {
     std::cout << "x: vous, o: opposant\n";
     std::cout << "tableau:\n";
-    TreeNode game {{EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}, YOU, {}};
-    game.print();
-    TreeNode tree = compute_tree(game);
-    std::cout << "Nombre de positions: " << total_positions << "\n";
+    TreeNode tree = compute_tree(TreeNode {{YOU, EMPTY, EMPTY, EMPTY, OTHER, OTHER, EMPTY, EMPTY, YOU}});
+    tree.print_position();
 }
