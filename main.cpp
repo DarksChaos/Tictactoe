@@ -353,7 +353,7 @@ void player_vs_bot() {
     TreeNode tree = compute_tree(TreeNode{ .position = {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}, .player = YOU});
     tree.clear();
     Entity starter;
-    std::cout << "commencer ? [o] ";
+    std::cout << "commencer ? [o/n] ";
     char input;
     std::cin >> input;
     if(input == 'o' || input == 'O') {
