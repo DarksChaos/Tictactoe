@@ -4,6 +4,7 @@
 #include <chrono>
 #include <ratio>
 #include <sstream>
+#include <thread>
 
 #ifdef NDEBUG
 #define Log(a, b, c)
@@ -52,18 +53,19 @@ std::string entity_eval_str(Entity e)
     case PLAYING:
         return "playing";
     case TIE:
-        return "tie";
+        return "egalité";
     case LOSING:
-        return "losing";
+        return "perdant";
     case WINNING:
-        return "winning";
+        return "gagnant";
     default:
         return "none";
     }
 }
 
-std::string position_str(Position position, int depth);
-std::string position_fast_str(Position position);
+std::string position_str(Position, int);
+std::string position_fast_str(Position);
+Entity position_eval(Position);
 
 struct TreeNode
 {
@@ -76,13 +78,20 @@ struct TreeNode
     size_t depth = 0;
     int last_move = -1;
     std::vector<int> best_sequence = {};
-
+    void clear() {
+        branches.clear();
+        best_sequence.clear();
+        eval = PLAYING;
+        depth = 0;
+    }
     void play(int i)
     {
         if (position[i] == EMPTY)
         {
             position[i] = player;
-            player = (player == YOU ? OTHER : YOU);
+            player = (player == OTHER ? YOU : OTHER);
+        } else {
+            std::exit(1);
         }
     }
     void print_fast_position()
@@ -121,7 +130,7 @@ struct TreeNode
     }
 };
 
-char chars[3] = {'o', ' ', 'x'};
+char chars[3] = {'O', ' ', 'X'};
 
 char case_char_or_pos(Entity square, int pos) {
     if(square == EMPTY) {
@@ -328,11 +337,8 @@ void find_best_sequence(TreeNode &&top)
     find_best_sequence(top);
 }
 
-int main()
-{
-    std::cout << "x: vous, o: opposant\n";
+void bot_vs_bot() {
     TreeNode tree = compute_tree(TreeNode{ .position = {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}, .player = YOU});
-    //tree.print_branches();
     tree.print_position();
     find_best_sequence(tree);
     for(int move: tree.best_sequence) {
@@ -341,4 +347,52 @@ int main()
         tree.print_position();
     }
     std::cout << '\n';
+}
+
+void player_vs_bot() {
+    TreeNode tree = compute_tree(TreeNode{ .position = {EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY}, .player = YOU});
+    tree.clear();
+    Entity starter;
+    std::cout << "commencer ? [o] ";
+    char input;
+    std::cin >> input;
+    if(input == 'o' || input == 'O') {
+        starter = YOU;
+    } else {
+        starter = OTHER;
+    }
+    while(position_eval(tree.position) == PLAYING) {
+        tree.clear();
+        tree = compute_tree(tree);
+        find_best_sequence(tree);
+        std::cout << "------------\nevaluation: " << entity_eval_str(tree.eval) << '\n';
+        tree.print_position();
+        int move;
+        if(tree.player == starter) {
+            while(true) {
+                std::cout << "votre tour: ";
+                std::cin >> move;
+                if(move < 0 || move > 8) {
+                    std::cout << "coup inexistant\n";
+                    continue;
+                }
+                if(tree.position[move] != EMPTY) {
+                    std::cout << "coup interdit\n";
+                    continue;
+                }
+                break;
+            }
+        } else {
+            move = tree.best_sequence[0];
+            std::cout << "mon coup: " << move << '\n';
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+        }
+        tree.play(move);
+    }
+    tree.print_position();
+}
+
+int main()
+{
+    player_vs_bot();
 }
